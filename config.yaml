@@ -1,0 +1,30 @@
+# Claude Skills Generator Configuration
+
+# Gemini API settings
+gemini:
+  model: "gemini-3-flash-preview" # Options: gemini-1.5-flash, gemini-2.0-flash-exp, gemini-1.5-pro
+  temperature: 0.7
+  max_output_tokens: 4000
+
+# Question generation settings
+questions:
+  max_questions: 5
+  timeout_seconds: 30
+
+# Output settings
+output:
+  default_location: "project" # Options: personal, project, custom
+  personal_path: "~/.claude/skills/"
+  project_path: ".claude/skills/"
+
+# Validation rules
+validation:
+  max_name_length: 64
+  max_description_length: 1024
+  min_description_length: 20
+  name_pattern: "^[a-z0-9-]+$"
+
+# Skill template defaults
+defaults:
+  user_invocable: true
+  include_examples: true
