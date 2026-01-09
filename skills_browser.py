@@ -28,7 +28,7 @@ COLORS = {
     'success': '#51CF66',       # Fresh green
     'warning': '#FFD93D',       # Bright yellow
     'info': '#74B9FF',          # Sky blue
-    'muted': 'dim white',       # Subtle gray
+    'muted': '#858585',         # Subtle gray
     'header': '#FF6B6B',        # Coral for headers
     'highlight': '#4ECDC4',     # Teal for highlights
 }
