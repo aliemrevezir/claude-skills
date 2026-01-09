@@ -49,18 +49,96 @@ An interactive command-line tool that uses Gemini AI to help you create high-qua
 
    Get your API key from: https://aistudio.google.com/apikey
 
-4. **Make the script executable**:
+4. **Make scripts executable**:
    ```bash
-   chmod +x skill_generator.py
+   chmod +x claude_skills.py skill_generator.py skills_browser.py
    ```
+
+## Quick Start
+
+The easiest way to get started is with the main CLI application:
+
+```bash
+python claude_skills.py
+```
+
+This will launch an interactive menu where you can:
+
+- **Generate new skills** with AI assistance
+- **Browse and import** global skills
+- **View help** and documentation
+
+### Direct Commands
+
+You can also launch specific tools directly:
+
+```bash
+python claude_skills.py generate    # Launch skill generator
+python claude_skills.py browse      # Launch skills browser
+```
 
 ## Usage
 
-### Basic Usage
+### Main CLI Application (Recommended)
+
+The unified CLI provides menu-based access to all features:
+
+```bash
+python claude_skills.py
+```
+
+**Menu Options:**
+
+- **[1] Generate New Skill** - Create skills interactively with AI
+- **[2] Browse Global Skills** - Import existing skills to your project
+- **[3] Help & Documentation** - View detailed help
+- **[Q] Exit** - Exit the application
+
+**Direct Access:**
+
+```bash
+python claude_skills.py generate    # Skip menu, go to generator
+python claude_skills.py browse      # Skip menu, go to browser
+```
+
+### Skills Browser - Import Global Skills
+
+Browse and import skills from your global skills directory to your project:
+
+```bash
+python claude_skills.py browse
+# OR
+python skills_browser.py
+```
+
+**Features:**
+
+- 📋 View all skills from `~/.claude/skills/`
+- ⬆️⬇️ Navigate with arrow keys
+- 👁️ Preview skill details before importing
+- ⚡ Import to project with Enter key
+- 🔄 Continue browsing and importing multiple skills
+- ❌ Exit anytime with the exit option
+
+**Keyboard Shortcuts:**
+
+- `↑/↓` - Navigate through skills
+- `Enter` - Select/Import skill
+- Select `[Exit Browser]` to quit
+
+This is perfect for:
+
+- Reusing skills across multiple projects
+- Sharing skills with your team
+- Quickly adding common skills to new projects
+
+### Skill Generator - Create New Skills
 
 Run the tool interactively:
 
 ```bash
+python claude_skills.py generate
+# OR
 python skill_generator.py
 ```
 

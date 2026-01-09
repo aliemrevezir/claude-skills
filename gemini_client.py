@@ -12,6 +12,7 @@ from google.genai import types
 from dotenv import load_dotenv
 import yaml
 import logging
+from rate_limit_utils import handle_rate_limit_error, is_rate_limit_error
 
 # Create logger (no console output, only file)
 logger = logging.getLogger(__name__)
@@ -160,6 +161,11 @@ Output only the questions as a numbered list, nothing else."""
                 'error': str(e),
                 'error_type': type(e).__name__
             })
+            
+            # Check if it's a rate limit error and provide helpful guidance
+            if is_rate_limit_error(e):
+                print(handle_rate_limit_error(str(e)))
+            
             raise
         
         # Track conversation
@@ -331,6 +337,11 @@ Output ONLY the raw SKILL.md content. No explanations, no code fences."""
                 'error': str(e),
                 'error_type': type(e).__name__
             })
+            
+            # Check if it's a rate limit error and provide helpful guidance
+            if is_rate_limit_error(e):
+                print(handle_rate_limit_error(str(e)))
+            
             raise
         
         # Remove code fences if Gemini added them despite instructions
