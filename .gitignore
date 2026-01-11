@@ -47,3 +47,5 @@ test-output/
 *.bak
 logs/
 .claude-skills-prefs.json
+
+*.local*
