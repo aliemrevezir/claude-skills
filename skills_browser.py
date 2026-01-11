@@ -333,11 +333,11 @@ class SkillsBrowser:
                         value=skill
                     ))
                 
-                # Add separator and exit option
-                choices.append(questionary.Separator())
+                # Add exit option (using a unique sentinel value instead of None)
+                EXIT_SENTINEL = "__EXIT__"
                 choices.append(questionary.Choice(
                     title=f"[{ICONS['wave']} Exit Browser]",
-                    value=None
+                    value=EXIT_SENTINEL
                 ))
                 
                 # Show interactive selection
@@ -351,10 +351,15 @@ class SkillsBrowser:
                 ).ask()
                 
                 # Handle selection
-                if selected is None:
+                if selected == "__EXIT__" or selected is None:
                     # User chose exit
                     console.print(f"\n[{COLORS['primary']}]Goodbye! {ICONS['wave']}[/{COLORS['primary']}]")
                     break
+                
+                # Safety check: ensure we have a Skill object
+                if not isinstance(selected, Skill):
+                    console.print(f"[{COLORS['accent']}]{ICONS['error']} Error: Invalid selection (got {type(selected).__name__} instead of Skill)[/{COLORS['accent']}]")
+                    continue
                 
                 console.print()
                 
