@@ -1,41 +1,98 @@
-# Claude Skills Generator 🎯
+# Claude Skills Manager
 
-An interactive command-line tool that uses Gemini AI to help you create high-quality Claude Skills. The tool asks intelligent questions (max 5) to understand your intent, then generates a properly formatted `SKILL.md` file following Claude's official specifications.
+A powerful CLI toolkit for creating, browsing, and managing Claude Skills. This tool uses Google's Gemini AI to intelligently generate high-quality `SKILL.md` files that extend Claude's capabilities for specific tasks.
+
+## What It Does
+
+Claude Skills Manager streamlines the workflow for creating and managing Claude Skills - specialized markdown files that teach Claude AI how to perform specific tasks. The toolkit provides:
+
+- **Interactive Skill Generation**: AI-powered skill creation through intelligent Q&A
+- **Skills Browser**: Browse and import existing skills from your global library
+- **Validation Engine**: Automatic validation of YAML frontmatter and markdown structure
+- **Preference Management**: Remembers your output location preferences
 
 ## Features
 
-- ✨ **Interactive Q&A**: Smart question generation that adapts based on your answers
-- 🤖 **Gemini-Powered**: Uses Google's Gemini AI for intelligent skill generation
-- 🔗 **Hooks Support**: Optionally generate skills with Claude Code hooks for automatic actions
-- 💾 **Remembers Preferences**: Saves your output location choice for next time
-- ✅ **Validation**: Automatic validation of YAML frontmatter and markdown structure
-- 🎨 **Beautiful CLI**: Rich console output with colors and formatting
-- 📝 **Best Practices**: Follows Claude's official skill authoring guidelines
-- 🔧 **Configurable**: Customizable settings for models, output locations, and more
+- **Gemini-Powered Generation**: Leverages Google's Gemini AI to understand your intent and generate well-structured skills
+- **Smart Q&A Flow**: Adaptive questioning (max 5 questions) that gathers just enough information
+- **Hooks Support**: Optional Claude Code hooks for automatic actions (validation, logging, etc.)
+- **Rich CLI Interface**: Beautiful terminal UI with colors, panels, and intuitive navigation
+- **Cross-Project Skills**: Manage both personal (`~/.claude/skills/`) and project-specific (`.claude/skills/`) skills
+- **Debug Logging**: Comprehensive logging for troubleshooting generation issues
+
+## Technical Overview
+
+### Architecture
+
+The project follows a modular design with clear separation of concerns:
+
+```
+claude-skills/
+├── claude_skills.py      # Main CLI entry point with menu system
+├── skill_generator.py    # Skill creation workflow orchestrator
+├── skills_browser.py     # Interactive skill browser and importer
+├── gemini_client.py      # Gemini API integration and conversation management
+├── question_engine.py    # Interactive Q&A flow management
+├── skill_validator.py    # YAML frontmatter and markdown validation
+├── preferences.py        # User preference persistence
+├── rate_limit_utils.py   # API rate limit handling utilities
+├── config.yaml           # Application configuration
+├── prompts/
+│   └── system_prompt.txt # Gemini system prompt for skill generation
+├── examples/             # Sample generated skills
+│   ├── code-formatter-with-hooks/
+│   └── commit-message-generator/
+└── logs/                 # Debug logs for skill generation sessions
+```
+
+### Core Components
+
+| Component            | Purpose                                                       |
+| -------------------- | ------------------------------------------------------------- |
+| `claude_skills.py`   | Main CLI application with interactive menu (Click-based)      |
+| `skill_generator.py` | Orchestrates the skill generation workflow end-to-end         |
+| `skills_browser.py`  | Arrow-key navigable browser for importing global skills       |
+| `gemini_client.py`   | Handles all Gemini API interactions with conversation history |
+| `question_engine.py` | Manages the interactive Q&A user experience                   |
+| `skill_validator.py` | Validates generated skills against Claude's specifications    |
+
+### Data Flow
+
+1. **User Intent** -> Question Engine captures initial description
+2. **Gemini Conversation** -> AI generates targeted questions based on intent
+3. **Interactive Q&A** -> User answers refine understanding (max 5 questions)
+4. **Skill Generation** -> Gemini produces complete SKILL.md content
+5. **Validation** -> Validator checks YAML frontmatter and markdown structure
+6. **Output** -> Skill saved to personal or project directory
+
+## Prerequisites
+
+- Python 3.8 or later
+- Google Gemini API key ([Get one here](https://aistudio.google.com/apikey))
 
 ## Installation
 
-1. **Clone the repository** (or navigate to the directory):
+1. **Clone the repository**:
 
    ```bash
-   cd /Users/aliemrevezir/Documents/github/claude-skills
+   git clone https://github.com/aliemrevezir/claude-skills.git
+   cd claude-skills
    ```
 
-2. **Install dependencies**:
+2. **Create virtual environment** (recommended):
+
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. **Install dependencies**:
 
    ```bash
    pip install -r requirements.txt
    ```
 
-   Or using uv (recommended):
-
-   ```bash
-   uv pip install -r requirements.txt
-   ```
-
-3. **Set up your Gemini API key**:
-
-   Copy the example environment file:
+4. **Configure API key**:
 
    ```bash
    cp .env.example .env
@@ -43,269 +100,194 @@ An interactive command-line tool that uses Gemini AI to help you create high-qua
 
    Edit `.env` and add your Gemini API key:
 
-   ```bash
+   ```
    GEMINI_API_KEY=your_actual_api_key_here
    ```
 
-   Get your API key from: https://aistudio.google.com/apikey
-
-4. **Make scripts executable**:
+5. **Make scripts executable** (Unix/macOS):
    ```bash
    chmod +x claude_skills.py skill_generator.py skills_browser.py
    ```
 
-## Quick Start
+## Usage
 
-The easiest way to get started is with the main CLI application:
+### Interactive Menu (Recommended)
+
+Launch the main application:
 
 ```bash
 python claude_skills.py
 ```
 
-This will launch an interactive menu where you can:
+Menu options:
 
-- **Generate new skills** with AI assistance
-- **Browse and import** global skills
-- **View help** and documentation
+- **[1] Generate New Skill** - Create skills with AI assistance
+- **[2] Browse Global Skills** - Import existing skills to your project
+- **[3] Help & Documentation** - View detailed usage information
+- **[Q] Exit** - Exit the application
 
 ### Direct Commands
 
-You can also launch specific tools directly:
+Skip the menu and jump to specific tools:
 
 ```bash
 python claude_skills.py generate    # Launch skill generator
 python claude_skills.py browse      # Launch skills browser
 ```
 
-## Usage
+### Skill Generator
 
-### Main CLI Application (Recommended)
-
-The unified CLI provides menu-based access to all features:
+Create a new skill interactively:
 
 ```bash
-python claude_skills.py
-```
-
-**Menu Options:**
-
-- **[1] Generate New Skill** - Create skills interactively with AI
-- **[2] Browse Global Skills** - Import existing skills to your project
-- **[3] Help & Documentation** - View detailed help
-- **[Q] Exit** - Exit the application
-
-**Direct Access:**
-
-```bash
-python claude_skills.py generate    # Skip menu, go to generator
-python claude_skills.py browse      # Skip menu, go to browser
-```
-
-### Skills Browser - Import Global Skills
-
-Browse and import skills from your global skills directory to your project:
-
-```bash
-python claude_skills.py browse
-# OR
-python skills_browser.py
-```
-
-**Features:**
-
-- 📋 View all skills from `~/.claude/skills/`
-- ⬆️⬇️ Navigate with arrow keys
-- 👁️ Preview skill details before importing
-- ⚡ Import to project with Enter key
-- 🔄 Continue browsing and importing multiple skills
-- ❌ Exit anytime with the exit option
-
-**Keyboard Shortcuts:**
-
-- `↑/↓` - Navigate through skills
-- `Enter` - Select/Import skill
-- Select `[Exit Browser]` to quit
-
-This is perfect for:
-
-- Reusing skills across multiple projects
-- Sharing skills with your team
-- Quickly adding common skills to new projects
-
-### Skill Generator - Create New Skills
-
-Run the tool interactively:
-
-```bash
-python claude_skills.py generate
-# OR
 python skill_generator.py
 ```
 
-The tool will:
-
-1. Ask what you want your skill to do
-2. Ask 2-5 follow-up questions to understand your needs
-3. Generate a complete `SKILL.md` file
-4. Validate the output
-5. Save it to your chosen location
-
-### With Initial Intent
-
-Provide your intent upfront to skip the first prompt:
+With initial intent:
 
 ```bash
 python skill_generator.py "Create a skill for reviewing pull requests"
 ```
 
-### Specify Output Location
-
-Save to personal skills directory (~/.claude/skills/):
+Specify output location:
 
 ```bash
-python skill_generator.py --output personal
+python skill_generator.py --output personal   # ~/.claude/skills/
+python skill_generator.py --output project    # .claude/skills/
+python skill_generator.py --output ~/custom   # Custom path
 ```
 
-Save to project skills directory (.claude/skills/):
+### Skills Browser
+
+Browse and import skills from your global library:
 
 ```bash
-python skill_generator.py --output project
+python skills_browser.py
 ```
 
-Save to custom location:
+Navigation:
 
-```bash
-python skill_generator.py --output ~/my-custom-skills
-```
-
-### Full Example
-
-```bash
-python skill_generator.py "Generate commit messages from git diffs" --output personal
-```
+- `↑/↓` - Navigate through skills
+- `Enter` - Select and preview skill
+- Select `[Exit Browser]` to quit
 
 ## Configuration
 
-Edit `config.yaml` to customize:
-
-- **Gemini Model**: Choose which Gemini model to use
-- **Max Questions**: Set the maximum number of questions (default: 5)
-- **Output Defaults**: Set default output location
-- **Validation Rules**: Customize validation constraints
+Edit `config.yaml` to customize behavior:
 
 ```yaml
+# Gemini API settings
 gemini:
-  model: "gemini-2.0-flash-exp" # Fast and capable
+  model: "gemini-3-flash-preview"
   temperature: 0.7
   max_output_tokens: 4000
 
+# Question generation settings
 questions:
   max_questions: 5
+  timeout_seconds: 30
 
+# Output settings
 output:
-  default_location: "personal"
+  default_location: "project"
+  personal_path: "~/.claude/skills/"
+  project_path: ".claude/skills/"
+
+# Validation rules
+validation:
+  max_name_length: 64
+  max_description_length: 1024
+  min_description_length: 20
+  name_pattern: "^[a-z0-9-]+$"
 ```
 
-## What Happens
-
-1. **Choose location**: Personal (~/.claude/skills/) or Project (.claude/skills/)
-
-   - Default: Project
-   - This question doesn't count toward the 5-question limit
-
-2. **Optional hooks**: Choose whether to include Claude Code hooks (default: no)
-
-   - Hooks enable automatic actions when the skill is used
-   - Also doesn't count toward question limit
-
-3. **Describe your intent**: What should the skill do?
-
-4. **Answer questions**: Gemini asks 2-5 intelligent questions
-
-5. **Review & save**: Generated skill is validated and saved file with:
-   - Proper YAML frontmatter
-   - Clear instructions
-   - Relevant examples
-   - Appropriate metadata fields
-6. **Validation** ensures the skill follows Claude's specifications
-
-## How It Works
-
-1. **You describe** what you want the skill to do
-2. **Gemini asks** intelligent follow-up questions (max 5)
-3. **You answer** the questions to refine the requirements
-4. **Gemini generates** a complete SKILL.md file with:
-   - Proper YAML frontmatter
-   - Clear instructions
-   - Relevant examples
-   - Appropriate metadata fields
-5. **Validation** ensures the skill follows Claude's specifications
-6. **Output** is saved to your chosen location
-
 ## Generated Skill Structure
+
+Each generated skill creates a directory structure:
 
 ```
 your-skill-name/
 ├── SKILL.md          # Main skill file (required)
-├── README.md         # Documentation (optional)
+├── README.md         # Documentation (optional, created on request)
 └── examples/         # Usage examples (optional)
     └── examples.md
 ```
 
-## Examples
+## Environment Variables
 
-See the `examples/` directory for sample generated skills:
-
-- Simple single-file skills
-- Skills with tool restrictions
-- Skills with Claude Code hooks for automatic actions
-- Skills with supporting documentation
+| Variable             | Description             | Default          |
+| -------------------- | ----------------------- | ---------------- |
+| `GEMINI_API_KEY`     | Google Gemini API key   | Required         |
+| `GEMINI_MODEL`       | Gemini model to use     | `gemini-3-flash` |
+| `DEFAULT_OUTPUT_DIR` | Default output location | `personal`       |
 
 ## Troubleshooting
 
 ### "GEMINI_API_KEY not found"
 
-Make sure you've:
+Ensure you've created `.env` with your API key:
 
-1. Created a `.env` file (copy from `.env.example`)
-2. Added your actual Gemini API key
+```bash
+cp .env.example .env
+# Edit .env and add your key
+```
 
 ### Validation Errors
 
-The tool validates generated skills automatically. Common issues:
+Common issues:
 
-- **Name format**: Must be lowercase with hyphens only (e.g., `my-skill-name`)
+- **Name format**: Must be lowercase with hyphens only (`my-skill-name`)
 - **Description length**: Must be 20-1024 characters
 - **Missing frontmatter**: File must start with `---`
 
-### Generated Skill Not Triggering in Claude
+### Skill Not Triggering in Claude
 
-Make sure the `description` field includes keywords that users would naturally say. For example:
+The `description` field determines when Claude uses your skill. Include natural trigger terms:
 
-❌ Bad: "Helps with documents"
-✅ Good: "Extract text and tables from PDF files, fill forms, merge documents. Use when working with PDF files or when the user mentions PDFs, forms, or document extraction."
+```yaml
+# Bad
+description: "Helps with documents"
 
-## Claude Skills Documentation
+# Good
+description: >
+  Extract text and tables from PDF files, fill forms, merge documents.
+  Use when working with PDF files or when the user mentions PDFs, forms,
+  or document extraction.
+```
 
-For more information about Claude Skills, see:
+### Rate Limit Errors
 
-- [Agent Skills Guide](https://docs.claude.com/en/docs/agents-and-tools/agent-skills)
-- [Best Practices](https://docs.claude.com/en/docs/agents-and-tools/agent-skills/best-practices)
+The tool includes rate limit handling. If you hit limits:
 
-## Requirements
+- Wait a few seconds and retry
+- Consider using a different Gemini model
+- Check your API quota at Google AI Studio
 
-- Python 3.8+
-- Gemini API key
-- Dependencies listed in `requirements.txt`
+## Examples
+
+The `examples/` directory contains sample skills:
+
+- **code-formatter-with-hooks**: Demonstrates hook integration for automatic formatting
+- **commit-message-generator**: Simple skill for generating commit messages
+
+## Contributing
+
+Contributions are welcome! Here's how to get started:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+Please ensure your code follows the existing style and includes appropriate tests.
 
 ## License
 
-MIT
+MIT License - see LICENSE file for details.
 
-## Support
+## Related Resources
 
-For issues or questions:
-
-1. Check the troubleshooting section above
-2. Review Claude's official Skills documentation
-3. Open an issue in this repository
+- [Claude Skills Documentation](https://docs.claude.com/en/docs/agents-and-tools/agent-skills)
+- [Claude Skills Best Practices](https://docs.claude.com/en/docs/agents-and-tools/agent-skills/best-practices)
+- [Google Gemini API](https://ai.google.dev/)
