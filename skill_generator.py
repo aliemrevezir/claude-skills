@@ -59,7 +59,13 @@ def get_output_path(location: str, skill_name: str, config: dict) -> Path:
     default='config.yaml',
     help='Path to configuration file'
 )
-def main(intent: str, output: str, config: str):
+@click.option(
+    '--provider', '-p',
+    type=click.Choice(['openai', 'anthropic', 'gemini'], case_sensitive=False),
+    default=None,
+    help='Override LLM provider (openai|anthropic|gemini)'
+)
+def main(intent: str, output: str, config: str, provider: str):
     """
     Claude Skills Generator - Create skills interactively with Gemini AI.
     
@@ -76,6 +82,9 @@ def main(intent: str, output: str, config: str):
         # Load configuration
         with open(config, 'r') as f:
             config_data = yaml.safe_load(f)
+
+        if provider:
+            os.environ["LLM_PROVIDER"] = provider.lower()
         
         # Initialize preferences manager
         prefs = PreferencesManager()

@@ -155,6 +155,7 @@ Specify output location:
 python skill_generator.py --output personal   # ~/.claude/skills/
 python skill_generator.py --output project    # .claude/skills/
 python skill_generator.py --output ~/custom   # Custom path
+python skill_generator.py --provider anthropic
 ```
 
 ### Skills Browser
@@ -164,6 +165,17 @@ Browse and import skills from your global library:
 ```bash
 python skills_browser.py
 ```
+
+### Project Importer
+
+Import skills into any other local project (e.g. a repo under `~/Documents/github`):
+
+```bash
+python project_importer.py
+```
+
+This lets you configure one or more "root" directories, pick a project inside them, then import a skill into that
+project's skills folder. Supported targets (switchable in settings, globally saved): `.claude/skills`, `.codex/skills`, `.agent/skills`, `.agents/skills` (çoklu seçim mümkün).
 
 Navigation:
 
@@ -176,11 +188,27 @@ Navigation:
 Edit `config.yaml` to customize behavior:
 
 ```yaml
-# Gemini API settings
-gemini:
-  model: "gemini-3-flash-preview"
-  temperature: 0.7
-  max_output_tokens: 4000
+# LLM provider selection (env override: LLM_PROVIDER)
+llm:
+  provider: "openai" # openai, anthropic, gemini
+
+providers:
+  openai:
+    base_url: "http://127.0.0.1:8045/v1"
+    model: "claude-sonnet-4-20250514"
+    temperature: 0.7
+    max_output_tokens: 8000
+
+  anthropic:
+    base_url: "http://127.0.0.1:8045"
+    model: "claude-sonnet-4-5"
+    temperature: 0.7
+    max_output_tokens: 8000
+
+  gemini:
+    model: "gemini-3-flash-preview"
+    temperature: 0.7
+    max_output_tokens: 4000
 
 # Question generation settings
 questions:
@@ -215,15 +243,22 @@ your-skill-name/
 
 ## Environment Variables
 
-| Variable             | Description             | Default          |
-| -------------------- | ----------------------- | ---------------- |
-| `GEMINI_API_KEY`     | Google Gemini API key   | Required         |
-| `GEMINI_MODEL`       | Gemini model to use     | `gemini-3-flash` |
-| `DEFAULT_OUTPUT_DIR` | Default output location | `personal`       |
+| Variable             | Description                                  | Default      |
+| -------------------- | -------------------------------------------- | ------------ |
+| `LLM_PROVIDER`       | Which provider SDK to use (`openai|anthropic|gemini`) | `openai` |
+| `DEFAULT_OUTPUT_DIR` | Default output location                      | `personal`   |
+| `OPENAI_API_KEY`     | API key for OpenAI / OpenAI-compatible proxy | Required (if `LLM_PROVIDER=openai`) |
+| `OPENAI_BASE_URL`    | Base URL for OpenAI / OpenAI-compatible proxy | Required (if `LLM_PROVIDER=openai`) |
+| `OPENAI_MODEL`       | Model name for OpenAI-compatible chat         | From `config.yaml` if unset |
+| `ANTHROPIC_API_KEY`  | API key for Anthropic / Anthropic-compatible proxy | Required (if `LLM_PROVIDER=anthropic`) |
+| `ANTHROPIC_BASE_URL` | Base URL for Anthropic / Anthropic-compatible proxy | Required (if `LLM_PROVIDER=anthropic`) |
+| `ANTHROPIC_MODEL`    | Model name for Anthropic messages             | From `config.yaml` if unset |
+| `GEMINI_API_KEY`     | Google Gemini API key                         | Required (if `LLM_PROVIDER=gemini`) |
+| `GEMINI_MODEL`       | Gemini model to use                            | From `config.yaml` if unset |
 
 ## Troubleshooting
 
-### "GEMINI_API_KEY not found"
+### "API key not found"
 
 Ensure you've created `.env` with your API key:
 
@@ -231,6 +266,8 @@ Ensure you've created `.env` with your API key:
 cp .env.example .env
 # Edit .env and add your key
 ```
+
+If you see `ANTHROPIC_API_KEY missing` but you set it, double-check the spelling: `ANTHROPIC_...` (with the **H**) not `ANTROPHIC_...`.
 
 ### Validation Errors
 
@@ -262,6 +299,11 @@ The tool includes rate limit handling. If you hit limits:
 - Wait a few seconds and retry
 - Consider using a different Gemini model
 - Check your API quota at Google AI Studio
+
+### "max_tokens must be greater than thinking.budget_tokens"
+
+If you enabled extended thinking (`thinking_budget_tokens` in `config.yaml`), make sure `max_output_tokens` is larger.
+The app auto-adjusts this (adds +512), but if you still see it, lower `thinking_budget_tokens` or raise `max_output_tokens`.
 
 ## Examples
 

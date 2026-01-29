@@ -10,6 +10,7 @@ Usage:
     python claude_skills.py           # Show interactive menu
     python claude_skills.py generate  # Launch skill generator
     python claude_skills.py browse    # Launch skills browser
+    python claude_skills.py projects  # Import skills into another project
 """
 
 import sys
@@ -17,12 +18,15 @@ import subprocess
 import platform
 from pathlib import Path
 import click
+import yaml
+import questionary
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 from rich.table import Table
 
 console = Console()
+CONFIG_PATH = Path(__file__).parent / "config.yaml"
 
 
 def get_cancel_key_info():
@@ -79,6 +83,19 @@ def display_menu():
     table.add_row("", "")  # Spacer
     table.add_row(
         "[3]",
+        "[bold cyan]Project Imports & Settings[/bold cyan]\n"
+        "Manage root directories and target folders, then import skills\n"
+        "into another project's skills directory."
+    )
+    table.add_row("", "")  # Spacer
+    table.add_row(
+        "[4]",
+        "[bold cyan]LLM Provider Settings[/bold cyan]\n"
+        "Choose which configured LLM provider to use (openai / anthropic / gemini)"
+    )
+    table.add_row("", "")  # Spacer
+    table.add_row(
+        "[5]",
         "[bold cyan]Help & Documentation[/bold cyan]\n"
         "View detailed information about using this tool and managing skills."
     )
@@ -134,6 +151,8 @@ Browses and imports existing skills:
   python claude_skills.py           # Interactive menu
   python claude_skills.py generate  # Direct to skill generator
   python claude_skills.py browse    # Direct to skills browser
+  python claude_skills.py llm       # Choose LLM provider
+  python claude_skills.py projects  # Import skills into another project
 
 [bold]Environment Setup[/bold]
 Make sure you have:
@@ -210,13 +229,82 @@ def run_skills_browser():
         return False
 
 
+def run_project_importer():
+    """Launch the project skill importer"""
+    console.clear()
+    console.print("[bold cyan]Launching Project Skill Importer...[/bold cyan]")
+    console.print()
+
+    script_path = Path(__file__).parent / "project_importer.py"
+    if not script_path.exists():
+        console.print("[bold red]Error:[/bold red] project_importer.py not found!")
+        console.print(f"Expected location: {script_path}")
+        return False
+
+    try:
+        result = subprocess.run([sys.executable, str(script_path)], check=False)
+        return result.returncode == 0
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Returned to main menu.[/yellow]")
+        return False
+    except Exception as e:
+        console.print(f"[bold red]Error launching project importer:[/bold red] {e}")
+        return False
+
+
+def _load_yaml(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    with open(path, "r") as f:
+        return yaml.safe_load(f) or {}
+
+
+def _save_yaml(path: Path, data: dict):
+    with open(path, "w") as f:
+        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True, default_flow_style=False, indent=2)
+
+
+def run_llm_settings():
+    """Allow user to pick which configured LLM provider to use."""
+    console.clear()
+    console.print("[bold cyan]LLM Provider Settings[/bold cyan]\n")
+
+    cfg = _load_yaml(CONFIG_PATH)
+    providers_cfg = cfg.get("providers", {}) if isinstance(cfg, dict) else {}
+    available = [p for p in providers_cfg.keys() if isinstance(p, str)]
+    if not available:
+        console.print("[red]No providers found in config.yaml -> providers.[/red]")
+        console.print("Add at least one (openai / anthropic / gemini) then retry.")
+        return False
+
+    current = (cfg.get("llm", {}) or {}).get("provider", "openai")
+    choice = questionary.select(
+        "Select LLM provider",
+        choices=[questionary.Choice(title=p, value=p, checked=(p == current)) for p in available],
+        default=current if current in available else None,
+    ).ask()
+
+    if not choice:
+        console.print("[yellow]No change made.[/yellow]")
+        return False
+
+    # Persist selection
+    if "llm" not in cfg or not isinstance(cfg.get("llm"), dict):
+        cfg["llm"] = {}
+    cfg["llm"]["provider"] = choice
+    _save_yaml(CONFIG_PATH, cfg)
+
+    console.print(f"[green]Provider set to:[/green] {choice}")
+    return True
+
+
 def interactive_menu():
     """Run the interactive menu loop"""
     while True:
         display_welcome()
         display_menu()
         
-        choice = console.input("[bold cyan]Select an option[/bold cyan] [1-3, Q]: ").strip().lower()
+        choice = console.input("[bold cyan]Select an option[/bold cyan] [1-5, Q]: ").strip().lower()
         
         if choice == '1':
             run_skill_generator()
@@ -227,19 +315,27 @@ def interactive_menu():
             console.print()
             input("Press Enter to return to main menu...")
         elif choice == '3':
+            run_project_importer()
+            console.print()
+            input("Press Enter to return to main menu...")
+        elif choice == '4':
+            run_llm_settings()
+            console.print()
+            input("Press Enter to return to main menu...")
+        elif choice == '5':
             display_help()
         elif choice == 'q':
             console.print("\n[bold cyan]Thank you for using Claude Skills Manager![/bold cyan]")
             console.print("[dim]Happy skill building! 🚀[/dim]\n")
             break
         else:
-            console.print("\n[yellow]Invalid option. Please choose 1, 2, 3, or Q.[/yellow]")
+            console.print("\n[yellow]Invalid option. Please choose 1, 2, 3, 4, 5, or Q.[/yellow]")
             console.print()
             input("Press Enter to continue...")
 
 
 @click.command()
-@click.argument('command', required=False, type=click.Choice(['generate', 'browse'], case_sensitive=False))
+@click.argument('command', required=False, type=click.Choice(['generate', 'browse', 'projects', 'llm'], case_sensitive=False))
 def main(command):
     """
     Claude Skills Manager - Create and manage Claude Skills
@@ -250,18 +346,26 @@ def main(command):
     Commands:
         generate    Launch the skill generator
         browse      Launch the skills browser
+        projects    Import skills into another project
+        llm         Choose LLM provider from config.yaml
     
     \b
     Examples:
         python claude_skills.py              # Interactive menu
         python claude_skills.py generate     # Direct to skill generator
         python claude_skills.py browse       # Direct to skills browser
+        python claude_skills.py projects     # Import skills into another project
+        python claude_skills.py llm          # Pick LLM provider
     """
     try:
         if command == 'generate':
             run_skill_generator()
         elif command == 'browse':
             run_skills_browser()
+        elif command == 'projects':
+            run_project_importer()
+        elif command == 'llm':
+            run_llm_settings()
         else:
             # No command specified, show interactive menu
             interactive_menu()

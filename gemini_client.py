@@ -5,10 +5,8 @@ Handles all interactions with the Gemini API.
 
 import os
 import json
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Literal, Any
 from datetime import datetime
-from google import genai
-from google.genai import types
 from dotenv import load_dotenv
 import yaml
 import logging
@@ -16,6 +14,8 @@ from rate_limit_utils import handle_rate_limit_error, is_rate_limit_error
 
 # Create logger (no console output, only file)
 logger = logging.getLogger(__name__)
+
+ProviderName = Literal["openai", "anthropic", "gemini"]
 
 
 class GeminiClient:
@@ -28,26 +28,33 @@ class GeminiClient:
         # Load configuration
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
-        
-        # Get API key
-        api_key = os.getenv('GEMINI_API_KEY')
-        if not api_key:
-            raise ValueError(
-                "GEMINI_API_KEY not found in environment variables. "
-                "Please set it in .env file or environment."
-            )
-        
-        # Get model name from env or config
-        self.model_name = os.getenv('GEMINI_MODEL', self.config['gemini']['model'])
-        
-        # Initialize Gemini client
-        self.client = genai.Client(api_key=api_key)
-        
-        # Generation config
-        self.generation_config = types.GenerateContentConfig(
-            temperature=self.config['gemini']['temperature'],
-            max_output_tokens=self.config['gemini']['max_output_tokens'],
-        )
+
+        self.provider: ProviderName = self._resolve_provider()
+        provider_cfg = self._resolve_provider_config(self.provider)
+
+        self.model_name = self._resolve_model_name(self.provider, provider_cfg)
+        self.temperature = float(provider_cfg.get("temperature", 0.7))
+        self.max_output_tokens = self._coerce_optional_int(provider_cfg.get("max_output_tokens")) or 4000
+
+        self.thinking_budget_tokens: Optional[int] = self._coerce_optional_int(provider_cfg.get("thinking_budget_tokens"))
+        self._thinking_params: Optional[Dict[str, int]] = None
+        if self.thinking_budget_tokens is not None:
+            if self.max_output_tokens <= self.thinking_budget_tokens:
+                logger.warning(
+                    "max_output_tokens (%s) is not greater than thinking budget (%s); increasing max_output_tokens automatically.",
+                    self.max_output_tokens,
+                    self.thinking_budget_tokens
+                )
+                self.max_output_tokens = self.thinking_budget_tokens + 512
+            self._thinking_params = {"type": "enabled", "budget_tokens": self.thinking_budget_tokens}
+
+        # Initialize provider SDK client
+        self._client: Any = None
+        self._openai_client: Any = None
+        self._anthropic_client: Any = None
+        self._gemini_model: Any = None
+
+        self._init_provider_client(self.provider, provider_cfg)
         
         # Load system prompt
         with open('prompts/system_prompt.txt', 'r') as f:
@@ -71,7 +78,159 @@ class GeminiClient:
         logger.setLevel(logging.DEBUG)
         # Prevent propagation to root logger (which would print to console)
         logger.propagate = False
-    
+
+    @staticmethod
+    def _coerce_optional_int(value: object) -> Optional[int]:
+        if value is None:
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped == "":
+                return None
+            try:
+                return int(stripped)
+            except ValueError:
+                raise ValueError(f"Expected an int-like value, got: {value!r}")
+        raise ValueError(f"Expected an int-like value, got: {value!r}")
+
+    def _effective_max_tokens(self) -> int:
+        if not self._thinking_params:
+            return self.max_output_tokens
+        budget = self._thinking_params.get("budget_tokens")
+        if isinstance(budget, int) and self.max_output_tokens <= budget:
+            return budget + 512
+        return self.max_output_tokens
+
+    def _resolve_provider(self) -> ProviderName:
+        env_provider = (os.getenv("LLM_PROVIDER") or "").strip().lower()
+        if env_provider in {"openai", "anthropic", "gemini"}:
+            return env_provider  # type: ignore[return-value]
+
+        cfg_provider = (
+            (self.config.get("llm", {}) or {}).get("provider")
+            or (self.config.get("providers", {}) or {}).get("default")
+        )
+        if isinstance(cfg_provider, str) and cfg_provider.strip().lower() in {"openai", "anthropic", "gemini"}:
+            return cfg_provider.strip().lower()  # type: ignore[return-value]
+
+        # Backwards-compatible default: if openai section exists, use it; else fall back to gemini.
+        if isinstance(self.config.get("openai"), dict):
+            return "openai"
+        return "gemini"
+
+    def _resolve_provider_config(self, provider: ProviderName) -> Dict[str, Any]:
+        providers = self.config.get("providers")
+        if isinstance(providers, dict) and isinstance(providers.get(provider), dict):
+            return dict(providers.get(provider) or {})
+
+        # Backwards compatible (older config.yaml layout)
+        legacy = self.config.get(provider)
+        if isinstance(legacy, dict):
+            return dict(legacy)
+
+        # Fallback to top-level openai/gemini keys if present
+        if provider == "openai" and isinstance(self.config.get("openai"), dict):
+            return dict(self.config.get("openai") or {})
+        if provider == "gemini" and isinstance(self.config.get("gemini"), dict):
+            return dict(self.config.get("gemini") or {})
+        return {}
+
+    def _resolve_model_name(self, provider: ProviderName, provider_cfg: Dict[str, Any]) -> str:
+        env_var = {
+            "openai": "OPENAI_MODEL",
+            "anthropic": "ANTHROPIC_MODEL",
+            "gemini": "GEMINI_MODEL",
+        }[provider]
+        env_val = os.getenv(env_var)
+        if env_val and env_val.strip():
+            return env_val.strip()
+        cfg_val = provider_cfg.get("model")
+        if isinstance(cfg_val, str) and cfg_val.strip():
+            return cfg_val.strip()
+        raise ValueError(
+            f"Model name missing for provider '{provider}'. "
+            f"Set {env_var} in .env (or set providers.{provider}.model in config.yaml)."
+        )
+
+    def _init_provider_client(self, provider: ProviderName, provider_cfg: Dict[str, Any]) -> None:
+        if provider == "openai":
+            try:
+                from openai import OpenAI
+            except Exception as e:  # pragma: no cover
+                raise RuntimeError(
+                    "OpenAI SDK not installed. Install with `pip install openai`."
+                ) from e
+
+            base_url = (os.getenv("OPENAI_BASE_URL") or provider_cfg.get("base_url") or "").strip()
+            api_key = (os.getenv("OPENAI_API_KEY") or provider_cfg.get("api_key") or "").strip()
+            if not base_url:
+                raise ValueError(
+                    "OPENAI_BASE_URL missing. Set it in .env or providers.openai.base_url in config.yaml."
+                )
+            if not api_key:
+                raise ValueError(
+                    "OPENAI_API_KEY missing. Set it in .env or providers.openai.api_key in config.yaml."
+                )
+            self._openai_client = OpenAI(base_url=base_url, api_key=api_key)
+            self._client = self._openai_client
+            return
+
+        if provider == "anthropic":
+            try:
+                from anthropic import Anthropic
+            except Exception as e:  # pragma: no cover
+                raise RuntimeError(
+                    "Anthropic SDK not installed. Install with `pip install anthropic`."
+                ) from e
+
+            base_url = (os.getenv("ANTHROPIC_BASE_URL") or provider_cfg.get("base_url") or "").strip()
+            # Backwards-compatible typo: ANTROPHIC_* (missing 'h')
+            api_key = (
+                os.getenv("ANTHROPIC_API_KEY")
+                or os.getenv("ANTROPHIC_API_KEY")
+                or provider_cfg.get("api_key")
+                or ""
+            ).strip()
+            if not base_url:
+                raise ValueError(
+                    "ANTHROPIC_BASE_URL missing. Set it in .env or providers.anthropic.base_url in config.yaml."
+                )
+            if not api_key:
+                raise ValueError(
+                    "ANTHROPIC_API_KEY missing. Set it in .env or providers.anthropic.api_key in config.yaml."
+                )
+            self._anthropic_client = Anthropic(base_url=base_url, api_key=api_key)
+            self._client = self._anthropic_client
+            return
+
+        if provider == "gemini":
+            api_key = (os.getenv("GEMINI_API_KEY") or provider_cfg.get("api_key") or "").strip()
+            if not api_key:
+                raise ValueError(
+                    "GEMINI_API_KEY missing. Set it in .env or providers.gemini.api_key in config.yaml."
+                )
+
+            try:
+                import google.generativeai as genai  # type: ignore
+            except Exception:
+                genai = None  # type: ignore[assignment]
+
+            if genai is None:
+                raise RuntimeError(
+                    "Gemini SDK not installed. Install with `pip install google-generativeai`."
+                )
+
+            genai.configure(api_key=api_key)
+            self._gemini_model = genai.GenerativeModel(self.model_name)
+            self._client = self._gemini_model
+            return
+
+        raise ValueError(f"Unsupported provider: {provider}")
+
     def _save_debug_log(self, event: str, data: dict):
         """Save debug information to log file."""
         log_entry = {
@@ -88,7 +247,83 @@ class GeminiClient:
             logger.debug(f"Logged {event}")
         except Exception as e:
             logger.error(f"Failed to save debug log: {e}")
-    
+
+    def _generate_text(self, prompt: str) -> str:
+        """Generate text using the configured provider."""
+        max_tokens = self._effective_max_tokens()
+
+        if self.provider == "openai":
+            kwargs: Dict[str, object] = {
+                "model": self.model_name,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": self.temperature,
+                "max_tokens": max_tokens,
+            }
+            if self._thinking_params:
+                kwargs["thinking"] = self._thinking_params
+
+            try:
+                response = self._openai_client.chat.completions.create(**kwargs)
+                return (response.choices[0].message.content or "").strip()
+            except Exception as e:
+                if self._thinking_params and "thinking.budget_tokens" in str(e) and "max_tokens" in str(e):
+                    kwargs["max_tokens"] = int(self._thinking_params["budget_tokens"]) + 512
+                    response = self._openai_client.chat.completions.create(**kwargs)
+                    return (response.choices[0].message.content or "").strip()
+                raise
+
+        if self.provider == "anthropic":
+            kwargs2: Dict[str, object] = {
+                "model": self.model_name,
+                "max_tokens": max_tokens,
+                "temperature": self.temperature,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+            if self._thinking_params:
+                kwargs2["thinking"] = self._thinking_params
+
+            try:
+                response = self._anthropic_client.messages.create(**kwargs2)
+            except Exception as e:
+                if self._thinking_params and "thinking.budget_tokens" in str(e) and "max_tokens" in str(e):
+                    kwargs2["max_tokens"] = int(self._thinking_params["budget_tokens"]) + 512
+                    response = self._anthropic_client.messages.create(**kwargs2)
+                else:
+                    raise
+
+            content = getattr(response, "content", None)
+            if isinstance(content, list):
+                parts: List[str] = []
+                for block in content:
+                    text = getattr(block, "text", None)
+                    if isinstance(text, str) and text:
+                        parts.append(text)
+                return "\n".join(parts).strip()
+            return str(response).strip()
+
+        if self.provider == "gemini":
+            try:
+                result = self._gemini_model.generate_content(
+                    prompt,
+                    generation_config={
+                        "temperature": self.temperature,
+                        "max_output_tokens": self.max_output_tokens,
+                    },
+                )
+                text = getattr(result, "text", None)
+                if isinstance(text, str):
+                    return text.strip()
+                return str(result).strip()
+            except Exception:
+                # Fall back to a simple call signature if SDK changes.
+                result = self._gemini_model.generate_content(prompt)
+                text = getattr(result, "text", None)
+                if isinstance(text, str):
+                    return text.strip()
+                return str(result).strip()
+
+        raise ValueError(f"Unsupported provider: {self.provider}")
+
     def finalize_log(self, skill_name: str):
         """Rename log file to use skill name."""
         if os.path.exists(self._temp_log_file):
@@ -143,12 +378,7 @@ Output only the questions as a numbered list, nothing else."""
         })
         
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-                config=self.generation_config
-            )
-            questions = response.text.strip()
+            questions = self._generate_text(prompt)
             
             logger.info(f"Received questions from Gemini: {len(questions)} chars")
             self._save_debug_log('questions_generated', {
@@ -237,12 +467,7 @@ If NO: Respond with exactly: "READY_TO_GENERATE"
 
 Output only the questions or "READY_TO_GENERATE", nothing else."""
 
-        response = self.client.models.generate_content(
-            model=self.model_name,
-            contents=prompt,
-            config=self.generation_config
-        )
-        result = response.text.strip()
+        result = self._generate_text(prompt)
         
         if result == "READY_TO_GENERATE":
             return None
@@ -316,12 +541,7 @@ Output ONLY the raw SKILL.md content. No explanations, no code fences."""
         })
         
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-                config=self.generation_config
-            )
-            skill_content = response.text.strip()
+            skill_content = self._generate_text(prompt)
             
             logger.info(f"Generated skill content: {len(skill_content)} chars")
             

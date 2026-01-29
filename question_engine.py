@@ -3,7 +3,8 @@ Question engine for interactive skill generation.
 Manages the Q&A flow with users.
 """
 
-from typing import List, Optional
+import re
+from typing import List
 from rich.console import Console
 from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
@@ -19,6 +20,22 @@ class QuestionEngine:
         self.console = Console()
         self.answers: List[str] = []
         self.questions_asked = 0
+
+    def _render_markdown_panel(self, content: str, title: str, border_style: str = "green"):
+        """Render LLM output with Markdown formatting (bold/italic/code) inside a panel.
+
+        Falls back to plain rendering if Rich's Markdown parser hits malformed input.
+        """
+        if not content or not content.strip():
+            return
+
+        try:
+            md = Markdown(content, code_theme="monokai", justify="left")
+            self.console.print(Panel(md, title=title, border_style=border_style))
+        except Exception:
+            # Graceful fallback so a bad Markdown block doesn't break the flow
+            self.console.print(Panel(content, title=title, border_style=border_style))
+        self.console.print()
     
     def display_welcome(self):
         """Display welcome message."""
@@ -27,8 +44,7 @@ class QuestionEngine:
 
 This tool will help you create a high-quality Claude Skill by asking a few targeted questions.
         """
-        self.console.print(Panel(Markdown(welcome), title="Welcome", border_style="blue"))
-        self.console.print()
+        self._render_markdown_panel(welcome, title="Welcome", border_style="blue")
     
     def get_output_location(self, prefs_manager=None) -> str:
         """
@@ -127,12 +143,11 @@ This tool will help you create a high-quality Claude Skill by asking a few targe
         Returns:
             List of user answers
         """
-        self.console.print(Panel(
-            Markdown(questions),
+        self._render_markdown_panel(
+            questions,
             title=f"Questions ({self.questions_asked + 1}-{self.questions_asked + questions.count(chr(10)) + 1})",
             border_style="green"
-        ))
-        self.console.print()
+        )
         
         # Parse questions
         question_lines = [
@@ -194,12 +209,22 @@ This tool will help you create a high-quality Claude Skill by asking a few targe
         
         if len(lines) > frontmatter_end + 5:
             preview += '\n...\n(and more)'
-        
+
         self.console.print(Panel(
             preview,
             title="Generated Skill Preview",
             border_style="green"
         ))
+
+        # Also show a formatted markdown preview of the instruction body so bold/italic render properly
+        body = self._extract_markdown_body(content)
+        if body:
+            truncated = self._truncate_for_preview(body)
+            self._render_markdown_panel(
+                truncated,
+                title="Rendered Markdown Preview",
+                border_style="cyan"
+            )
     
     def display_success(self, filepath: str):
         """Display success message with filepath."""
@@ -232,5 +257,29 @@ This tool will help you create a high-quality Claude Skill by asking a few targe
         
         self.console.print()
 
+    def _extract_markdown_body(self, content: str) -> str:
+        """Return the markdown body after YAML frontmatter."""
+        if not content:
+            return ""
 
-import re
+        if content.startswith('---'):
+            parts = content.split('---', 2)
+            if len(parts) == 3:
+                return parts[2].strip()
+        return content.strip()
+
+    def _truncate_for_preview(self, text: str, max_lines: int = 80, max_chars: int = 4000) -> str:
+        """Trim long markdown so we don't flood the terminal."""
+        if not text:
+            return ""
+
+        lines = text.splitlines()
+        truncated_lines = lines[:max_lines]
+        truncated_text = "\n".join(truncated_lines)
+
+        if len(lines) > max_lines:
+            truncated_text += "\n..."
+
+        if len(truncated_text) > max_chars:
+            truncated_text = truncated_text[:max_chars] + "\n..."
+        return truncated_text
